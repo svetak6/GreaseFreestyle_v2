@@ -255,6 +255,9 @@ def create_gpencil_layer_on_frame(scene, FS_lineset_name, color, alpha, fill_col
 
     gpencil_layer = get_grease_pencil(gpencil_layer_name=FS_lineset_name)
 
+    # for debugging purposes
+    print("create_gpencil_layer_on_frame layer created")
+
     # can this be done more neatly? layer.frames.get(..., ...) doesn't seem to work
     frame = frame_from_frame_number(gpencil_layer, scene.frame_current) or gpencil_layer.frames.new(scene.frame_current)
 
@@ -316,7 +319,10 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
         ##### 2.79 colorname - palette color name
         ## gpstroke = frame.strokes.new(colorname=colorname)
         ## 2.91
-        gpstroke = frame.strokes.new()
+        try:
+            gpstroke = frame.strokes.new()
+        except:
+            print("Error in creating new strokes")
         ## ?? assign material??
 
         # TODO: make options with props
@@ -324,9 +330,15 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
         ##        gpstroke.draw_mode = options.draw_mode
         ##2.91
 #        gpstroke.display_mode = options.draw_mode
-        gpstroke.display_mode = 'SCREEN'
+        try:
+            gpstroke.display_mode = 'SCREEN'
+        except:
+            print("Error in reading display_mode")
 
-        gpstroke.points.add(count=len(fstroke), pressure=1, strength=1)
+        try:
+            gpstroke.points.add(count=len(fstroke), pressure=1, strength=1)
+        except:
+            print("Error in adding points")
 
         ##!! set THICKNESS and ALPHA of stroke
         ## StrokeAttribute for this StrokeVertex
@@ -334,35 +346,47 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
         ## svert.attribute.thickness
 
         # the max width gets pressure 1.0. Smaller widths get a pressure 0 <= x < 1
-        base_width = functools.reduce(max, (sum(svert.attribute.thickness) for svert in fstroke), lineset.linestyle.thickness)
+        try:
+            base_width = functools.reduce(max, (sum(svert.attribute.thickness) for svert in fstroke), lineset.linestyle.thickness)
+        except:
+            print("Error in setting base_width")
 
         # set the default (pressure == 1) width for the gpstroke
-        gpstroke.line_width = base_width
+        try:
+            gpstroke.line_width = base_width
+        except:
+            print("Error in setting line_width")
 
-        if options.draw_mode == '3DSPACE':
+        if options.draw_mode == 'SCREEN':
+            try:
+                width, height = render_dimensions(bpy.context.scene)
+            except:
+                print("Error in setting width, height")
+
             for svert, point in zip (fstroke, gpstroke.points):
-                point.co = mat * svert.point_3d
-                # print(point.co, svert.point_3d)
+                try:
+                    x, y = svert.point
+                except:
+                    print("Error in setting x, y")
 
-                if options.thickness_extraction:
-                    point.pressure = sum(svert.attribute.thickness) / max(1e-5, base_width)
-
-                if options.alpha_extraction:
-                    point.strength = svert.attribute.alpha
-
-        elif options.draw_mode == 'SCREEN':
-            width, height = render_dimensions(bpy.context.scene)
-            for svert, point in zip (fstroke, gpstroke.points):
-                x, y = svert.point
-                point.co = Vector(( abs(x / width), abs(y / height), 0.0 )) * 100
+                try:
+                    point.co = Vector(( abs(x / width), abs(y / height), 0.0 )) * 100
+                except:
+                    print("Error in setting point.co")
 #                point.co = Vector(  abs(x / width), abs(y / height), 0.0) * 100
 #                point.co = Vector( (abs(x / width)), (abs(y / height)), (0.0) ) * 100
 
                 if options.thickness_extraction:
-                    point.pressure = sum(svert.attribute.thickness) / max(1e-5, base_width)
+                    try:
+                        point.pressure = sum(svert.attribute.thickness) / max(1e-5, base_width)
+                    except:
+                        print("Error in setting point.pressure")
 
                 if options.alpha_extraction:
-                    point.strength = svert.attribute.alpha
+                    try:
+                        point.strength = svert.attribute.alpha
+                    except:
+                        print("Error in setting point.extraction")
 
         else:
             raise NotImplementedError()
@@ -384,11 +408,12 @@ def freestyle_to_strokes(scene, lineset, strokes):
     # render the normal strokes
     #strokes = render_visible_strokes()
 
+    """
     exporter = scene.freestyle_gpencil_export
     linestyle = lineset.linestyle
 
     # TODO: make options with props
-    """
+
     options = DrawOptions(draw_mode= exporter.draw_mode
                           , color_extraction = linestyle.use_extract_color
                           , color_extraction_mode = linestyle.extract_color
