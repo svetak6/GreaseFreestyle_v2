@@ -321,6 +321,7 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
         ## 2.91
         try:
             gpstroke = frame.strokes.new()
+            print("1")
         except:
             print("Error in creating new strokes")
         ## ?? assign material??
@@ -332,11 +333,13 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
 #        gpstroke.display_mode = options.draw_mode
         try:
             gpstroke.display_mode = 'SCREEN'
+            print("2")
         except:
             print("Error in reading display_mode")
 
         try:
             gpstroke.points.add(count=len(fstroke), pressure=1, strength=1)
+            print("3")
         except:
             print("Error in adding points")
 
@@ -348,29 +351,39 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
         # the max width gets pressure 1.0. Smaller widths get a pressure 0 <= x < 1
         try:
             base_width = functools.reduce(max, (sum(svert.attribute.thickness) for svert in fstroke), lineset.linestyle.thickness)
+            print("4")
         except:
             print("Error in setting base_width")
 
         # set the default (pressure == 1) width for the gpstroke
         try:
             gpstroke.line_width = base_width
+            print("5")
         except:
             print("Error in setting line_width")
 
         if options.draw_mode == 'SCREEN':
             try:
                 width, height = render_dimensions(bpy.context.scene)
+                print("6")
             except:
                 print("Error in setting width, height")
 
             for svert, point in zip (fstroke, gpstroke.points):
                 try:
                     x, y = svert.point
+                    print("7")
                 except:
                     print("Error in setting x, y")
 
                 try:
-                    point.co = Vector(( abs(x / width), abs(y / height), 0.0 )) * 100
+#                    point.co = Vector(( abs(x / width), abs(y / height), 0.0 )) * 100
+                    poi = Vector(( abs(x / width), abs(y / height), 0.0 )) * 100
+                    print("8_1")
+                    poif = poi.freeze()
+                    print("8_2")
+                    point.co = poif
+                    print("8_3")
                 except:
                     print("Error in setting point.co")
 #                point.co = Vector(  abs(x / width), abs(y / height), 0.0) * 100
@@ -379,12 +392,14 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
                 if options.thickness_extraction:
                     try:
                         point.pressure = sum(svert.attribute.thickness) / max(1e-5, base_width)
+                        print("9_1")
                     except:
                         print("Error in setting point.pressure")
 
                 if options.alpha_extraction:
                     try:
                         point.strength = svert.attribute.alpha
+                        print("9_2")
                     except:
                         print("Error in setting point.extraction")
 
