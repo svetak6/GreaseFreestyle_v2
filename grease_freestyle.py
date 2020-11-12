@@ -14,43 +14,29 @@ bl_info = {
 import bpy
 import functools
 import collections
-import sys
 
 from bpy.props import (
-                BoolProperty,
-                EnumProperty,
-                PointerProperty,
-#               IntProperty,
-            )
+    BoolProperty,
+    EnumProperty,
+    PointerProperty,
+)
 
 # TODO: fix * module referencies
-#from freestyle.shaders import *
-#from freestyle.predicates import *
-#from freestyle.chainingiterators import ChainSilhouetteIterator, ChainPredicateIterator
+
 from freestyle.types import (
-                    Operators,
-                    StrokeShader,
-                    StrokeVertex
-                    )
-from freestyle.functions import CurveMaterialF0D
+    Operators,
+    StrokeShader,
+    StrokeVertex
+)
+#from freestyle.functions import CurveMaterialF0D
 
-
-
-from bpy_extras import view3d_utils
-import bpy_extras
-from mathutils import Vector, Matrix, Color
+from mathutils import Vector, Matrix
 
 import parameter_editor
 
-
+# container for options
 DrawOptions = collections.namedtuple('DrawOptions',
                                      'draw_mode color_extraction color_extraction_mode thickness_extraction alpha_extraction')
-
-# useless
-def get_strokes():
-    # a tuple containing all strokes from the current render. should get replaced by freestyle.context at some point
-    return tuple(map(Operators().get_stroke_from_index, range(Operators().get_strokes_size())))
-
 
 # get the exact scene dimensions
 def render_height(scene):
@@ -195,11 +181,25 @@ def get_grease_pencil_material(gpencil_mat_name='init_GP_Material') -> bpy.types
 
 
 def get_grease_pencil_obj(gpencil_obj_name='init_GPencil') -> bpy.types.GreasePencil:
+    """
+    Return the active grease-pencil object with existing name. Initialize new one if non-grease pencil object is active.
+    Keep the name of GreasePencil data-block the same as object's name
+    :param gpencil_obj_name: name/key of the grease pencil object in the scene
+    """
     scene = bpy.context.scene
+    view_layer = bpy.context.view_layer
 
-    bpy.ops.object.gpencil_add(location=(0, 0, 0), type='EMPTY')
-        # rename grease pencil
-    scene.objects[-1].name = gpencil_obj_name
+    # Use active object
+    if view_layer.objects.active.type == 'GPENCIL':
+        # bpy.context.view_layer.objects.active.name or
+        # bpy.context.selected_objects[0].name
+        gpencil_obj_name = view_layer.objects.active.name
+    # If not present already, create grease pencil object. Else use object with 'init_GPencil' name if it exists.
+    else:
+        if gpencil_obj_name not in scene.objects:
+            bpy.ops.object.gpencil_add(location=(0, 0, 0), type='EMPTY')
+            # rename grease pencil
+            scene.objects[-1].name = gpencil_obj_name
 
     # Get grease pencil object
     gpencil_obj = scene.objects[gpencil_obj_name]
@@ -216,9 +216,35 @@ def get_grease_pencil_layer(gpencil_obj: bpy.types.GreasePencil,
                             gpencil_layer_name='init_GP_Layer',
                             clear_layer=False) -> bpy.types.GPencilLayer:
 
-    gpencil_layer = gpencil_obj.data.layers.new(gpencil_layer_name, set_active=True)
-#    gpencil_layer_name = gpencil_obj.data.layers.active.info
-#    gpencil_layer = gpencil_obj.data.layers[gpencil_layer_name]
+    """
+    Return the active grease-pencil layer with the given name. Create one if there is no one layer in this Grease Pencil.
+    :param gpencil: grease-pencil object for the layer data
+    :param gpencil_layer_name: name/key of the grease pencil layer
+    :param clear_layer: whether to clear all previous layer data
+    """
+    #    scene = bpy.context.scene
+    #    view_layer = bpy.context.view_layer
+
+    # Get grease pencil layer or create one if none exists
+    if gpencil_obj.data.layers \
+            and gpencil_obj.data.layers.active.info != gpencil_layer_name:
+        #           and gpencil_layer_name in gpencil_obj.data.layers:
+
+        gpencil_layer_name = gpencil_obj.data.layers.active.info
+
+    else:
+        if not gpencil_obj.data.layers:
+            gpencil_layer = gpencil_obj.data.layers.new(gpencil_layer_name, set_active=True)
+            gpencil_layer_name = gpencil_obj.data.layers.active.info
+
+    #TODO: make able to overwrite/keep current frame
+    """
+    #    if scene.freestyle_gpencil_export.write_mode == 'OVERWRITE':
+    #        clear_layer = True
+    #        gpencil_layer.clear()  # clear all previous layer data
+    """
+
+    gpencil_layer = gpencil_obj.data.layers[gpencil_layer_name]
 
     # for debugging purposes
     print("get_grease_pencil_layer")
@@ -247,16 +273,12 @@ def get_grease_pencil(gpencil_obj_name='init_GPencil_object',
 
 
 def create_gpencil_layer_on_frame(scene, FS_lineset_name, color, alpha, fill_color, fill_alpha):
+    """Creates a new GPencil layer (if needed) to store the Freestyle result"""
 
     # for debugging purposes
     print("create_gpencil_layer_on_frame start")
 
-    """Creates a new GPencil layer (if needed) to store the Freestyle result"""
-
     gpencil_layer = get_grease_pencil(gpencil_layer_name=FS_lineset_name)
-
-    # for debugging purposes
-    print("create_gpencil_layer_on_frame layer created")
 
     # can this be done more neatly? layer.frames.get(..., ...) doesn't seem to work
     frame = frame_from_frame_number(gpencil_layer, scene.frame_current) or gpencil_layer.frames.new(scene.frame_current)
@@ -275,133 +297,48 @@ def frame_from_frame_number(layer, current_frame):
     return next((frame for frame in layer.frames if frame.frame_number == current_frame), False)
 
 
+
+
 def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode='3DSPACE', color_extraction='BASE'):
     mat = bpy.context.scene.camera.matrix_local.copy()
 
-    """
-    # COLOR 
-    # pick the active palette or create a default one
-    grease_pencil = bpy.context.scene.grease_pencil
-    palette = grease_pencil.palettes.active or grease_pencil.palettes.new("GP_Palette")
-
-    # can we tag the colors the script adds, to remove them when they are not used?
-    cache = { color_to_hex(color.color) : color for color in palette.colors }
-
-    # keep track of which colors are used (to remove unused ones)
-    used = []
-
-    for fstroke in strokes:
-
-        # the color object can be "owned", so use Color to clone it
-        if options.color_extraction:
-            if options.color_extraction_mode == 'FIRST':
-                base_color = Color(fstroke[0].attribute.color)
-            elif options.color_extraction_mode == 'FINAL':
-                base_color = Color(fstroke[-1].attribute.color)
-            else:
-                base_color = Color(lineset.linestyle.color)
-
-        # color has to be frozen (immutable) for it to be stored
-        base_color.freeze()
-
-        colorname = get_colorname(palette.colors, base_color, palette).name
-
-        # append the current color, so it is kept
-        used.append(colorname)
-    """
 
     for fstroke in strokes:
 
         # for debugging purposes
         print("freestyle_to_gpencil_strokes for_loop start")
 
-        ##!! create GP stokes object
-        ##### 2.79 colorname - palette color name
-        ## gpstroke = frame.strokes.new(colorname=colorname)
-        ## 2.91
-        try:
-            gpstroke = frame.strokes.new()
-            print("1")
-        except:
-            print("Error in creating new strokes")
-        ## ?? assign material??
+        gpstroke = frame.strokes.new()
 
-        # TODO: make options with props
+        # TODO: make options with props?
         ##2.79
         ##        gpstroke.draw_mode = options.draw_mode
         ##2.91
-#        gpstroke.display_mode = options.draw_mode
-        try:
-            gpstroke.display_mode = 'SCREEN'
-            print("2")
-        except:
-            print("Error in reading display_mode")
+        #        gpstroke.display_mode = options.draw_mode
+        gpstroke.display_mode = 'SCREEN'
 
-        try:
-            gpstroke.points.add(count=len(fstroke), pressure=1, strength=1)
-            print("3")
-        except:
-            print("Error in adding points")
+        gpstroke.points.add(count=len(fstroke), pressure=1, strength=1)
 
-        ##!! set THICKNESS and ALPHA of stroke
-        ## StrokeAttribute for this StrokeVertex
-        ##!! 2.79
-        ## svert.attribute.thickness
-
+        ##!! set THICKNESS and ALPHA of stroke from StrokeAttribute for this StrokeVertex
         # the max width gets pressure 1.0. Smaller widths get a pressure 0 <= x < 1
-        try:
-            base_width = functools.reduce(max, (sum(svert.attribute.thickness) for svert in fstroke), lineset.linestyle.thickness)
-            print("4")
-        except:
-            print("Error in setting base_width")
+        base_width = functools.reduce(max,
+                                      (sum(svert.attribute.thickness) for svert in fstroke),
+                                      lineset.linestyle.thickness)
 
         # set the default (pressure == 1) width for the gpstroke
-        try:
-            gpstroke.line_width = base_width
-            print("5")
-        except:
-            print("Error in setting line_width")
+        gpstroke.line_width = base_width
 
         if options.draw_mode == 'SCREEN':
-            try:
-                width, height = render_dimensions(bpy.context.scene)
-                print("6")
-            except:
-                print("Error in setting width, height")
-
+            width, height = render_dimensions(bpy.context.scene)
             for svert, point in zip (fstroke, gpstroke.points):
-                try:
-                    x, y = svert.point
-                    print("7")
-                except:
-                    print("Error in setting x, y")
-
-                try:
-#                    point.co = Vector(( abs(x / width), abs(y / height), 0.0 )) * 100
-                    poi = Vector(( abs(x / width), abs(y / height), 0.0 )) * 100
-                    print("8_1")
-                    poif = poi.freeze()
-                    print("8_2")
-                    point.co = poif
-                    print("8_3")
-                except:
-                    print("Error in setting point.co")
-#                point.co = Vector(  abs(x / width), abs(y / height), 0.0) * 100
-#                point.co = Vector( (abs(x / width)), (abs(y / height)), (0.0) ) * 100
+                x, y = svert.point
+                point.co = Vector(( abs(x / width), abs(y / height), 0.0 )) * 100
 
                 if options.thickness_extraction:
-                    try:
-                        point.pressure = sum(svert.attribute.thickness) / max(1e-5, base_width)
-                        print("9_1")
-                    except:
-                        print("Error in setting point.pressure")
+                    point.pressure = sum(svert.attribute.thickness) / max(1e-5, base_width)
 
                 if options.alpha_extraction:
-                    try:
-                        point.strength = svert.attribute.alpha
-                        print("9_2")
-                    except:
-                        print("Error in setting point.extraction")
+                    point.strength = svert.attribute.alpha
 
         else:
             raise NotImplementedError()
@@ -423,12 +360,11 @@ def freestyle_to_strokes(scene, lineset, strokes):
     # render the normal strokes
     #strokes = render_visible_strokes()
 
+
+    # TODO: make options with props?
     """
     exporter = scene.freestyle_gpencil_export
     linestyle = lineset.linestyle
-
-    # TODO: make options with props
-
     options = DrawOptions(draw_mode= exporter.draw_mode
                           , color_extraction = linestyle.use_extract_color
                           , color_extraction_mode = linestyle.extract_color
@@ -436,12 +372,12 @@ def freestyle_to_strokes(scene, lineset, strokes):
                           , thickness_extraction = linestyle.use_extract_thickness
                           )
     """
-    options = DrawOptions(draw_mode= 'SCREEN'
-                          , color_extraction = True
-                          , color_extraction_mode = 'BASE'
-                          , alpha_extraction = False
-                          , thickness_extraction = False
-                          )
+    options = DrawOptions(  draw_mode= 'SCREEN'
+                            , color_extraction = True
+                            , color_extraction_mode = 'BASE'
+                            , alpha_extraction = False
+                            , thickness_extraction = False
+                            )
 
     # for debugging purposes
     print("freestyle_to_strokes end")
@@ -483,7 +419,7 @@ class Callbacks:
 classes = (
     FreestyleGPencilProps,
     SVGExporterPanel,
-#    ExporterLinesetProps,
+    #    ExporterLinesetProps,
     FSGPExporterLinesetPanel,
 )
 
@@ -535,7 +471,7 @@ def register():
 def unregister():
 
     for cls in classes:
-#    for cls in reversed(classes):
+        #    for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
 
     del bpy.types.Scene.freestyle_gpencil_export
