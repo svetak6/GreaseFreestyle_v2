@@ -346,11 +346,12 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
             width, height = render_dimensions(bpy.context.scene)
 #            for svert, point in zip (fstroke, gpstroke.points):
             for svert, point in zip (fstrokesList[fstroke], gpstroke.points):
-                x, y = svert.point
-                point_co = Vector(( abs(x / width), abs(y / height), 0.0 )) * 10
+                x, z = svert.point
+#                point_co = Vector(( abs(x / width), abs(y / height), 0.0 )) * 10
+                point_co = Vector(( (x / width), 0.0, (z / height) )) * 10
                 point.co = point_co
-                print(point.co)
-                print(svert.point)
+#                print(point.co)
+#                print(svert.point)
 
                 if options.thickness_extraction:
                     point.pressure = sum(svert.attribute.thickness) / max(1e-5, base_width)
