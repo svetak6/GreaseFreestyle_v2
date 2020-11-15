@@ -63,7 +63,7 @@ class FreestyleGPencilProps(bpy.types.PropertyGroup):
         items=[
             # ('2DSPACE', "2D Space", "Export a single frame", 0),
             ## TODO: fix 3D space drawing
-            ('3DSPACE', "3D Space", "Export an animation", 1),
+            ##('3DSPACE', "3D Space", "Export an animation", 1),
             # ('2DIMAGE', "2D Image", "", 2),
             ('SCREEN', "Screen", "", 3),
         ],
