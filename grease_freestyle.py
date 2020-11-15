@@ -1,7 +1,7 @@
 #
 bl_info = {
     "name": "Grease Freestyle",
-    "author": "Andrew Maslennikov",
+    "author": "Folkert de Vries, Andrew Maslennikov",
     "version": (0, 0, 1),
     "blender": (2, 83, 0),
     "location": "Properties > Render > Grease Freestyle",
@@ -63,7 +63,7 @@ class FreestyleGPencilProps(bpy.types.PropertyGroup):
         items=[
             # ('2DSPACE', "2D Space", "Export a single frame", 0),
             ## TODO: fix 3D space drawing
-            ##('3DSPACE', "3D Space", "Export an animation", 1),
+            ('3DSPACE', "3D Space", "Export an animation", 1),
             # ('2DIMAGE', "2D Image", "", 2),
             ('SCREEN', "Screen", "", 3),
         ],
@@ -205,6 +205,7 @@ def get_grease_pencil_obj(gpencil_obj_name='init_GPencil') -> bpy.types.GreasePe
     gpencil_obj = scene.objects[gpencil_obj_name]
     # Rename GreasePencil data-block to the same name as object
     gpencil_obj.data.name = gpencil_obj.name
+#    bpy.context.active_object = gpencil_obj
 
     # for debugging purposes
     print("get_grease_pencil_obj")
@@ -302,8 +303,12 @@ def frame_from_frame_number(layer, current_frame):
 def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode='3DSPACE', color_extraction='BASE'):
     mat = bpy.context.scene.camera.matrix_local.copy()
 
+    fstrokesList = [fstroke for fstroke in strokes]
 
-    for fstroke in strokes:
+    gpstrokesList = []
+
+#    for fstroke in strokes:
+    for fstroke in range(len(fstrokesList)):
 
         # for debugging purposes
         print("freestyle_to_gpencil_strokes for_loop start")
@@ -314,25 +319,52 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
         ##2.79
         ##        gpstroke.draw_mode = options.draw_mode
         ##2.91
-        #        gpstroke.display_mode = options.draw_mode
-        gpstroke.display_mode = 'SCREEN'
+        gpstroke.display_mode = options.draw_mode
+        #gpstroke.display_mode = 'SCREEN'
 
-        gpstroke.points.add(count=len(fstroke), pressure=1, strength=1)
+        gpstroke.points.add(count=len(fstrokesList[fstroke]), pressure=1, strength=1)
+        #?
+#        bpy.context.view_layer.objects.active.data.layers.active.active_frame.strokes[-1].select = True
+#        gpstroke = bpy.context.view_layer.objects.active.data.layers.active.active_frame.strokes[-1]
 
         ##!! set THICKNESS and ALPHA of stroke from StrokeAttribute for this StrokeVertex
         # the max width gets pressure 1.0. Smaller widths get a pressure 0 <= x < 1
         base_width = functools.reduce(max,
-                                      (sum(svert.attribute.thickness) for svert in fstroke),
+#                                      (sum(svert.attribute.thickness) for svert in fstroke),
+                                      (sum(svert.attribute.thickness) for svert in fstrokesList[fstroke]),
                                       lineset.linestyle.thickness)
 
         # set the default (pressure == 1) width for the gpstroke
         gpstroke.line_width = base_width
 
+        gppointsList =[]
+
+        # TODO: make it a function
+        #  points = func(frame):
+        #  then  gpstroke.points = points
         if options.draw_mode == 'SCREEN':
             width, height = render_dimensions(bpy.context.scene)
-            for svert, point in zip (fstroke, gpstroke.points):
+#            for svert, point in zip (fstroke, gpstroke.points):
+            for svert, point in zip (fstrokesList[fstroke], gpstroke.points):
                 x, y = svert.point
-                point.co = Vector(( abs(x / width), abs(y / height), 0.0 )) * 100
+                point_co = Vector(( abs(x / width), abs(y / height), 0.0 )) * 10
+                point.co = point_co
+                print(point.co)
+                print(svert.point)
+
+                if options.thickness_extraction:
+                    point.pressure = sum(svert.attribute.thickness) / max(1e-5, base_width)
+
+                if options.alpha_extraction:
+                    point.strength = svert.attribute.alpha
+                gppointsList.append(point)
+
+
+
+        elif options.draw_mode == '3DSPACE':
+            for svert, point in zip (fstroke, gpstroke.points):
+                point.co = mat @ svert.point_3d
+                # print(point.co, svert.point_3d)
 
                 if options.thickness_extraction:
                     point.pressure = sum(svert.attribute.thickness) / max(1e-5, base_width)
@@ -342,6 +374,13 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
 
         else:
             raise NotImplementedError()
+#        bpy.context.view_layer.objects.active.data.layers.active.active_frame.strokes[-1].select = False
+
+        gpstrokesList.append(gpstroke)
+
+
+
+
 
             # for debugging purposes
         print("freestyle_to_gpencil_strokes for_loop end")
@@ -362,7 +401,7 @@ def freestyle_to_strokes(scene, lineset, strokes):
 
 
     # TODO: make options with props?
-    """
+
     exporter = scene.freestyle_gpencil_export
     linestyle = lineset.linestyle
     options = DrawOptions(draw_mode= exporter.draw_mode
@@ -378,7 +417,7 @@ def freestyle_to_strokes(scene, lineset, strokes):
                             , alpha_extraction = False
                             , thickness_extraction = False
                             )
-
+    """
     # for debugging purposes
     print("freestyle_to_strokes end")
 
@@ -425,7 +464,7 @@ classes = (
 
 def register():
 
-    ##### add custom props types to Linestyle props (for FSGPExporterLinesetPanel class)####
+    ##### add custom props to Linestyle props (for FSGPExporterLinesetPanel class)####
     linestyle = bpy.types.FreestyleLineStyle
 
     linestyle.use_extract_color = BoolProperty(
