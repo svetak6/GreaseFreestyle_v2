@@ -228,7 +228,7 @@ def get_grease_pencil_layer(gpencil_obj: bpy.types.GreasePencil,
     #    view_layer = bpy.context.view_layer
 
     # Get grease pencil layer or create one if none exists
-
+    assert gpencil_obj.type == 'GPENCIL', "Active object is not Grease Pencil"
     if gpencil_obj.data.layers \
             and gpencil_obj.data.layers.active.info != gpencil_layer_name:
         #           and gpencil_layer_name in gpencil_obj.data.layers:
