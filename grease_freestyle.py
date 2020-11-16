@@ -205,7 +205,8 @@ def get_grease_pencil_obj(gpencil_obj_name='init_GPencil') -> bpy.types.GreasePe
     gpencil_obj = scene.objects[gpencil_obj_name]
     # Rename GreasePencil data-block to the same name as object
     gpencil_obj.data.name = gpencil_obj.name
-#    bpy.context.active_object = gpencil_obj
+    # set the object active
+    view_layer.objects.active = gpencil_obj
 
     # for debugging purposes
     print("get_grease_pencil_obj")
@@ -227,6 +228,7 @@ def get_grease_pencil_layer(gpencil_obj: bpy.types.GreasePencil,
     #    view_layer = bpy.context.view_layer
 
     # Get grease pencil layer or create one if none exists
+
     if gpencil_obj.data.layers \
             and gpencil_obj.data.layers.active.info != gpencil_layer_name:
         #           and gpencil_layer_name in gpencil_obj.data.layers:
@@ -319,9 +321,12 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
         ##2.79
         ##        gpstroke.draw_mode = options.draw_mode
         ##2.91
+        print("01")
+        # crash!!!
         gpstroke.display_mode = options.draw_mode
         #gpstroke.display_mode = 'SCREEN'
 
+        print("02")
         gpstroke.points.add(count=len(fstrokesList[fstroke]), pressure=1, strength=1)
         #?
 #        bpy.context.view_layer.objects.active.data.layers.active.active_frame.strokes[-1].select = True
@@ -329,26 +334,35 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
 
         ##!! set THICKNESS and ALPHA of stroke from StrokeAttribute for this StrokeVertex
         # the max width gets pressure 1.0. Smaller widths get a pressure 0 <= x < 1
+        print("03")
         base_width = functools.reduce(max,
 #                                      (sum(svert.attribute.thickness) for svert in fstroke),
                                       (sum(svert.attribute.thickness) for svert in fstrokesList[fstroke]),
                                       lineset.linestyle.thickness)
 
         # set the default (pressure == 1) width for the gpstroke
+        print("04")
         gpstroke.line_width = base_width
 
+        print("05")
         gppointsList =[]
 
         # TODO: make it a function
         #  points = func(frame):
         #  then  gpstroke.points = points
         if options.draw_mode == 'SCREEN':
+            print("06_")
             width, height = render_dimensions(bpy.context.scene)
+            print("07_")
 #            for svert, point in zip (fstroke, gpstroke.points):
             for svert, point in zip (fstrokesList[fstroke], gpstroke.points):
+                print("08_")
                 x, z = svert.point
+                print("09_")
 #                point_co = Vector(( abs(x / width), abs(y / height), 0.0 )) * 10
                 point_co = Vector(( (x / width), 0.0, (z / height) )) * 10
+                print("10_")
+                ### crash!!!
                 point.co = point_co
 #                print(point.co)
 #                print(svert.point)
@@ -377,7 +391,9 @@ def freestyle_to_gpencil_strokes(strokes, frame, lineset, options): # draw_mode=
             raise NotImplementedError()
 #        bpy.context.view_layer.objects.active.data.layers.active.active_frame.strokes[-1].select = False
 
+        print("11")
         gpstrokesList.append(gpstroke)
+        print("12")
 
 
 
